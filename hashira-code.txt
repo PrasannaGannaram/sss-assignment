@@ -1,0 +1,226 @@
+import React, { useState, useEffect } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Icon for the Input Configuration section
+const TerminalIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-5 w-5"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+);
+
+// Icon for the AI Analysis section
+const BrainIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-5 w-5"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-2.5-2.5V2zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 2.5-2.5V2z"/><path d="M5 10a2.5 2.5 0 0 1 2.5-2.5h9A2.5 2.5 0 0 1 19 10v1.5a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 11.5V10z"/></svg>
+);
+
+
+function App() {
+    const [output, setOutput] = useState(null);
+    const [testCase, setTestCase] = useState('testCase1');
+    const [isLoading, setIsLoading] = useState(false);
+    const [chartData, setChartData] = useState([]);
+    const [aiAnalysis, setAiAnalysis] = useState('');
+    const [isAiLoading, setIsAiLoading] = useState(false);
+
+    const testCases = {
+        testCase1: {
+            "keys": { "n": 4, "k": 3 },
+            "1": { "base": "10", "value": "4" },
+            "2": { "base": "2", "value": "111" },
+            "3": { "base": "10", "value": "12" },
+            "6": { "base": "4", "value": "213" }
+        },
+        testCase2: {
+            "keys": { "n": 10, "k": 7 },
+            "1": { "base": "6", "value": "13444211440455345511" },
+            "2": { "base": "15", "value": "aed7015a346d635" },
+            "3": { "base": "15", "value": "6aeeb669631c227c" },
+            "4": { "base": "16", "value": "e1b5e05623d881f" },
+            "5": { "base": "8", "value": "316034514573652620673" },
+            "6": { "base": "3", "value": "2122212201122002221120200210011020220200" },
+            "7": { "base": "3", "value": "20120221122211000100210021102001201112121" },
+            "8": { "base": "6", "value": "20220554335330240002224253" },
+            "9": { "base": "12", "value": "45153788322a1255483" },
+            "10": { "base": "7", "value": "1101613130313526312514143" }
+        }
+    };
+    
+    // Function to call the Gemini API for analysis
+    const fetchAiAnalysis = async (degree, constant_c) => {
+        setIsAiLoading(true);
+        setAiAnalysis('');
+        
+        const apiKey = ""; // This will be provided by the execution environment
+        const apiUrl = https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey};
+        
+        const systemPrompt = "You are an expert mathematician and data analyst. Explain the results of a polynomial calculation in a concise, insightful way for a technical manager.";
+        const userQuery = I have determined that a polynomial of degree ${degree} has a constant term (y-intercept) of c = ${constant_c}. The calculation was performed using Lagrange Interpolation on a set of given (x,y) points. Briefly explain the significance of this result. What does the constant 'c' represent in practical terms for this polynomial function? Keep the explanation to 2-3 sentences.;
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{ parts: [{ text: userQuery }] }],
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(API call failed with status: ${response.status});
+            }
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (text) {
+                setAiAnalysis(text);
+} else {
+                setAiAnalysis("Could not retrieve AI analysis. The calculation is still correct.");
+            }
+        } catch (error) {
+            console.error("Error fetching AI analysis:", error);
+            setAiAnalysis("An error occurred while fetching the AI analysis. The calculation result is displayed above.");
+        } finally {
+            setIsAiLoading(false);
+        }
+    };
+
+
+    // Main function to solve the polynomial
+    const solvePolynomial = (input) => {
+        setIsLoading(true);
+        setOutput(null);
+        setChartData([]);
+
+        // Simulate a small delay for better user experience
+        setTimeout(() => {
+            const { keys, ...roots } = input;
+            const k = keys.k;
+            const degree = k - 1;
+
+            const points = Object.entries(roots).map(([xStr, data]) => {
+                const x = BigInt(xStr);
+                const y = BigInt(parseInt(data.value, parseInt(data.base)));
+                return { x, y };
+            }).slice(0, k);
+            
+            // Prepare data for the chart, converting BigInt to Number for the library
+            const processedChartData = points.map(p => ({ x: Number(p.x), y: Number(p.y) }));
+            setChartData(processedChartData);
+
+            // Lagrange Interpolation to find the constant 'c'
+            let c = BigInt(0);
+            for (let j = 0; j < k; j++) {
+                let numerator = BigInt(1);
+                let denominator = BigInt(1);
+                for (let m = 0; m < k; m++) {
+                    if (m !== j) {
+                        numerator *= -points[m].x;
+                        denominator *= (points[j].x - points[m].x);
+                    }
+                }
+                const term = points[j].y * numerator / denominator;
+                c += term;
+            }
+            
+            const finalC = c.toString();
+            setOutput(finalC);
+            setIsLoading(false);
+            
+            // Trigger the AI analysis after the calculation is complete
+            fetchAiAnalysis(degree, finalC);
+        }, 500);
+    };
+    
+    useEffect(() => {
+        solvePolynomial(testCases[testCase]);
+    }, [testCase]);
+    
+    return (
+        <div className="bg-gray-900 text-gray-200 min-h-screen font-mono p-4 sm:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto">
+                <header className="text-center mb-10">
+                    <h1 className="text-4xl sm:text-5xl font-bold text-cyan-400 tracking-wider">Project Insight</h1>
+                    <p className="text-gray-400 mt-2 text-lg">AI-Assisted Polynomial Analysis</p>
+                </header>
+
+                <main className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                    {/* Left Column: Input and Controls */}
+                    <div className="lg:col-span-2 bg-gray-800/50 p-6 rounded-lg border border-gray-700">
+                        <div className="flex items-center text-lg mb-4 text-cyan-300">
+                            <TerminalIcon />
+                            <h2 className="font-semibold ">Input Configuration</h2>
+                        </div>
+                         <div className="mb-4">
+                             <label htmlFor="test-case-selector" className="text-gray-400 block mb-2">Select Test Case:</label>
+                             <select 
+                                 id="test-case-selector"
+                                 value={testCase}
+                                 onChange={(e) => setTestCase(e.target.value)}
+                                 className="w-full bg-gray-700 text-white p-2 rounded-md border border-gray-600 focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                                 <option value="testCase1">Sample Test Case 1</option>
+                                 <option value="testCase2">Sample Test Case 2</option>
+                             </select>
+                        </div>
+                        <pre className="bg-black text-xs text-gray-300 p-4 rounded-md overflow-x-auto h-[450px]">
+                            {JSON.stringify(testCases[testCase], null, 2)}
+                        </pre>
+                    </div>
+
+                    {/* Right Column: Visualization and Results */}
+                    <div className="lg:col-span-3 space-y-8">
+                        {/* Visualization Card */}
+                        <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
+                             <h2 className="text-lg font-semibold mb-4 text-cyan-300">Data Point Visualization</h2>
+                             <div className="w-full h-64">
+                               <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                                        <XAxis dataKey="x" stroke="#A0AEC0" />
+                                        <YAxis stroke="#A0AEC0" allowDataOverflow={true} type="number" domain={['auto', 'auto']} />
+                                        <Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }} />
+                                        <Legend />
+                                        <Line type="monotone" dataKey="y" name="P(x)" stroke="#2DD4BF" strokeWidth={2} activeDot={{ r: 8 }} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                             </div>
+                        </div>
+
+                        {/* Result Card */}
+                        <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
+                             <h2 className="text-lg font-semibold mb-4 text-cyan-300">Calculated Constant (c)</h2>
+                              <div className="flex items-center justify-center h-24">
+                                {isLoading ? (
+                                    <div className="flex items-center text-gray-400">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500 mr-3"></div>
+                                        <span>Analyzing Polynomial...</span>
+                                    </div>
+                                ) : (
+                                    <p className="text-4xl lg:text-5xl font-bold text-green-400 break-all">{output}</p>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* AI Analysis Card */}
+                        <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
+                             <div className="flex items-center text-lg mb-4 text-cyan-300">
+                                <BrainIcon />
+                                <h2 className="font-semibold ">AI-Powered Analysis</h2>
+                            </div>
+                              <div className="text-gray-300 min-h-[6rem] flex items-center justify-center">
+                                {isAiLoading ? (
+                                    <div className="w-full space-y-3">
+                                        <div className="animate-pulse h-4 bg-gray-700 rounded w-3/4"></div>
+                                        <div className="animate-pulse h-4 bg-gray-700 rounded w-full"></div>
+                                        <div className="animate-pulse h-4 bg-gray-700 rounded w-1/2"></div>
+                                    </div>
+                                ) : (
+                                    <p className="text-base leading-relaxed">{aiAnalysis}</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+export default App;
